@@ -1,0 +1,122 @@
+.pair-field-column {
+  float: left;
+  width: 48%;
+}
+
+.pair-field-column .form-text {
+  width: 95%;
+}
+
+/* Settings form */
+/* Label settings */
+.pair-name-label-settings,
+.pair-value-label-settings {
+	width: 49%;
+	display: inline;
+	float: left;
+	margin-top: 5px;
+}
+
+.pair-name-label-settings {
+	margin-left: 5px;
+}
+
+
+.pair-value-label-settings {
+	clear:  right;
+}
+
+.pair-name-label-settings .form-text ,
+.pair-value-label-settings .form-text {
+	float: left;
+	width: 95%;
+	clear: right;
+}
+
+.pair-name-label-settings .description,
+.pair-value-label-settings .description {
+	clear: left;
+	width: 95%;
+	float: left;
+	margin-right: 7px;
+}
+
+/* Radios */
+.pair-name-options-settings,
+.pair-value-options-settings {
+	width: 49%;
+	float: left;
+	margin-top: 5px;
+}
+
+.pair-name-options-settings {
+	margin-left: 5px;
+	margin-bottom: -12px;
+	clear: left;
+}
+
+.pair-value-options-settings {
+	clear: right;
+}
+
+.pair-options-settings-desc {
+	clear: left;
+	display: block;
+	
+	/* Using Drupal description text css */
+	margin: 5px 0px 15px 5px;
+	line-height: 1.231em;
+	font-size: 0.923em;
+	color: rgb(102, 102, 102);
+}
+
+
+/* Static settings */
+.pair-name-static-settings,
+.pair-value-static-settings {
+	width: 49%;
+	float: left;
+	margin-left: 5px;
+	margin-bottom: -12px;
+}
+
+.pair-name-static-settings .form-text,
+.pair-value-static-settings .form-text {
+	width: 95%;
+	clear: right;
+}
+
+.pair-value-static-settings {
+	clear: right;
+	margin-left: 5px;
+}
+
+.pair-static-desc {
+	clear: both;
+
+	/* Using Drupal description text css */
+	margin: 5px 0px 15px 5px;
+	line-height: 1.231em;
+	font-size: 0.923em;
+	color: rgb(102, 102, 102);
+}
+
+/* Maxlength */
+.pair-name-maxlength-settings,
+.pair-value-maxlength-settings {
+	width: 49%;
+	float: left;
+	margin-bottom: -12px;
+}
+
+.pair-name-maxlength-settings {
+	margin-left: 5px;
+}
+
+.pair-maxlength-desc {
+	/* Using Drupal description text css */
+	margin: 5px 0px 15px 5px;
+	line-height: 1.231em;
+	font-size: 0.923em;
+	color: rgb(102, 102, 102);
+}

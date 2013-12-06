@@ -1,0 +1,8 @@
+.pair-field-column {
+  float: right;
+}
+
+.pair-field-column.pair-field-value .form-text {
+  direction: ltr;
+  text-align: left;
+}

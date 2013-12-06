@@ -1,0 +1,10 @@
+name = Pair
+description = Name value pair field
+core = 7.x
+package = Fields
+
+files[] = pair.module
+
+
+
+

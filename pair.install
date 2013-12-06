@@ -1,0 +1,28 @@
+<?php
+
+/**
+ * @file
+ * Install file for the pair module.
+ */
+
+/**
+ * Implements hook_field_schema().
+ */
+function pair_field_schema($field) {
+  return array(
+    'columns' => array(
+      'name' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'sortable' => TRUE,
+      ),
+      'value' => array(
+        'type' => 'varchar',
+        'length' => 2048,
+        'not null' => FALSE,
+        'sortable' => TRUE,
+      ),
+    ),
+  );
+}

@@ -1,0 +1,965 @@
+<?php
+
+/**
+ * @file
+ * Defines text-to-text pair field types.
+ */
+
+define('PAIR_TARGET_DEFAULT', 'default');
+define('PAIR_TARGET_NEW_WINDOW', '_blank');
+define('PAIR_TARGET_TOP', '_top');
+define('PAIR_TARGET_USER', 'user');
+
+/**
+ * Max value length - needs to match value in pair.install.
+ */
+define('PAIR_VALUE_MAX_LENGTH', 2048);
+define('PAIR_NAME_MAX_LENGTH', 255);
+
+/**
+ * Implements hook_field_info().
+ */
+function pair_field_info() {
+  return array(
+    'pair_field' => array(
+      'label' => t('Pair'),
+      'description' => t('Store a name-value pair in the database.'),
+      'settings' => array(
+        'name' => 'optional',
+        'value' => 'optional',
+        'value_label' => 'Value',
+        'name_label' => 'Name',
+        'name_value' => '',
+        'value_value' => '',
+        'name_maxlength' => 128,
+        'value_maxlength' => 128,
+        'enable_tokens' => 1,
+        'display' => array(
+          'value_cutoff' => 80,
+        ),
+      ),
+      'instance_settings' => array(
+        'name' => 'optional',
+        'value' => 'optional',
+        'value_label' => 'Value',
+        'name_label' => 'Name',
+        'name_value' => '',
+        'value_value' => '',
+        'name_maxlength' => 128,
+        'value_maxlength' => 128,
+        'enable_tokens' => 1,
+        'display' => array(
+          'value_cutoff' => 80,
+        ),
+        'validate_value' => 1,
+      ),
+      'default_widget' => 'pair_field',
+      'default_formatter' => 'pair_default',
+      // Support hook_entity_property_info() from "Entity API".
+      'property_type' => 'field_item_pair',
+      'property_callbacks' => array('pair_field_property_info_callback'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_instance_settings_form().
+ */
+function pair_field_instance_settings_form($field, $instance) {
+  $settings = $instance['settings'];
+  $form = array(
+    '#element_validate' => array('pair_field_settings_form_validate'),
+  );
+
+  $name_options = array(
+    'optional' => t('Optional (default)'),
+    'required' => t('Required'),
+    'value' => t('Static'),
+    'none' => t('None'),
+  );
+
+  $value_options = $name_options;
+  unset($value_options['none']);
+
+  // Hidden form elements to "move up" the "Default Value" fieldset
+  for ($i = 0; $i < 8; $i++) {
+    $form["hidden$i"] = array('#markup' => '');
+  }
+
+  $element_ra = array('name' => 'Name', 'value' => 'Value');
+
+  // Label textfields
+  foreach ($element_ra as $element => $title) {
+    $pfx = '<div class="pair-' . $element . '-label-settings">';
+    $fe = $element . '_label';
+    $form[$fe] = array(
+      '#type' => 'textfield',
+      '#title' => t("$title Label"),
+      '#default_value' => isset($settings[$fe]) && !empty(trim($settings[$fe])) ?
+        $settings[$fe] : $title,
+      '#description' => t("The label for the $title that will be displayed to the user."),
+      '#prefix' => $pfx,
+      '#suffix' => '</div>',
+    );
+  }
+
+  // Name / Value options radios
+  foreach ($element_ra as $element => $title) {
+    $pfx = '<div class="pair-' . $element . '-options-settings">';
+    $options = (!strcasecmp($element, 'name')) ? $name_options : $value_options;
+    $form[$element] = array(
+      '#type' => 'radios',
+      '#title' => t("Pair $title Options"),
+      '#default_value' => isset($settings[$element]) ? $settings[$element] : 'optional',
+      '#options' => $options,
+      '#prefix' => $pfx,
+      '#suffix' => '</div>',
+    );
+  }
+
+
+  // Options description
+  $form['options_desc'] = array(
+    '#markup' => 'If the pair Name is optional or required, a field will be displayed to the end user. ' .
+      'If the pair name is static, the pair will always use the same name. If ' .
+      '<a href="http://drupal.org/project/token">token module</a> is installed, the static name value may use ' .
+      'any other entity field as its value. Static and token-based names may include most inline XHTML tags ' .
+      'such as <em>strong</em>, <em>em</em>, <em>img</em>, <em>span</em>, etc. The same applies for the pair Value.',
+    '#prefix' => '<div class="pair-options-settings-desc">',
+    '#suffix' => '</div>',
+  );
+
+  // Static value textfields
+  foreach ($element_ra as $element => $title) {
+    $pfx = '<div class="pair-' . $element . '-static-settings">';
+    $fe = $element . '_value';
+    $form[$fe] = array(
+      '#type' => 'textfield',
+      '#title' => t("Static $element"),
+      '#default_value' => isset($settings[$fe]) ? $settings[$fe] : '',
+      '#prefix' => $pfx,
+      '#suffix' => '</div>',
+    );
+  }
+
+  // Static value description
+  $form['static_desc'] = array(
+    '#markup' => 'This name or value will always be used if &ldquo;Static&rdquo; for Name or Value is selected above, respectively..',
+    '#prefix' => '<div class="pair-static-desc">',
+    '#suffix' => '</div>',
+  );
+
+
+  // Maxlength settings
+  foreach ($element_ra as $element => $title) {
+    $pfx = '<div class="pair-' . $element . '-maxlength-settings">';
+    $fe = $element . '_maxlength';
+    $maxlen = (!strcasecmp($element, 'name')) ? 3 : 4;
+    $form[$fe] = array(
+      '#type' => 'textfield',
+      '#title' => t("Max length of the $element field"),
+      '#default_value' => isset($settings[$fe]) ? $settings[$fe] : '128',
+      //'#description' => t('Set a maximum length on the name field (applies only if Pair Name is optional or required).  The maximum limit is 255 characters.'),
+      '#maxlength' => $maxlen,
+      '#size' => $maxlen,
+      '#prefix' => $pfx,
+      '#suffix' => '</div>',
+    );
+  }
+
+  // Maxlength description
+  $form['maxlength_desc'] = array(
+    '#markup' => 'Set a maximum length on the name and value fields (applies only if Pair Name / Value ' .
+      'is optional or required).  The maximum limit for the name is ' . PAIR_NAME_MAX_LENGTH .
+      ' characters, and ' . PAIR_VALUE_MAX_LENGTH . ' for the value.',
+    '#prefix' => '<div class="pair-maxlength-desc">',
+    '#suffix' => '</div>',
+  );
+
+  if (module_exists('token')) {
+    // Add token module replacements fields
+    $form['enable_tokens'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Allow user-entered tokens'),
+      '#default_value' => isset($settings['enable_tokens']) ? $settings['enable_tokens'] : 1,
+      '#description' => t('Checking will allow users to enter tokens in Values and Names on the entity edit form. This does not affect the field settings on this page.'),
+    );
+    $entity_info = entity_get_info($instance['entity_type']);
+    $form['tokens_help'] = array(
+      '#theme' => 'token_tree',
+      '#token_types' => array($entity_info['token type']),
+      '#global_types' => TRUE,
+      '#click_insert' => TRUE,
+      '#dialog' => TRUE,
+    );
+  }
+
+  $form['display'] = array(
+    '#tree' => TRUE,
+  );
+ /* $form['display']['value_cutoff'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Value Display Cutoff'),
+    '#default_value' => isset($settings['display']['value_cutoff']) ? $settings['display']['value_cutoff'] : '80',
+    '#description' => t('If the user does not include a name for this pair, the Value will be used as the name. When should the pair name be trimmed and finished with an elipsis (&hellip;)? Leave blank for no limit.'),
+    '#maxlength' => 3,
+    '#size' => 3,
+  );*/
+  return $form;
+}
+
+/**
+ * #element_validate handler for pair_field_instance_settings_form().
+ */
+function pair_field_settings_form_validate($element, &$form_state, $complete_form) {
+  $settings = $form_state['values']['instance']['settings'];
+  $option_ra = array('value' => 'static', 'none' => 'none');
+  foreach ($option_ra as $option => $meaning) {
+    if (!strcasecmp($settings['name'], $option) &&
+      !strcasecmp($settings['value'], $option)) {
+      form_set_error('value_value', t("At least one of name or value must not be $meaning."));
+    }
+  }
+
+  $element_ra = array('name', 'value');
+  foreach ($element_ra as $element) {
+    $readable = strtoupper(substr($element, 0, 1)) . substr($element, 1);
+    $lower_readable = $element;
+    $label = $element . '_label';   $val = $element . '_value';
+    if (empty($settings[$label])) {
+      form_set_error($label, t("A label for the $readable must be provided."));
+    }
+    if (!strcasecmp($settings[$element], 'value') &&
+      empty($settings[$val])) {
+      form_set_error($val, t("A default name must be provided if the $lower_readable is a static."));
+    }
+  }
+
+  /*if (!empty($settings['display']['value_cutoff']) && !is_numeric($settings['display']['value_cutoff'])) {
+    form_set_error('display', t('Value Display Cutoff value must be numeric.'));
+  }*/
+
+  foreach ($element_ra as $element) {
+    $maxlen = $element . '_maxlength';
+    $len = (!strcasecmp($element, 'name')) ? TRIPLE_NAME_MAX_LENGTH : TRIPLE_VALUE_MAX_LENGTH;
+    if (empty($settings[$maxlen])) {
+      form_set_value($element[$maxlen], '128', $form_state);
+    }
+    elseif (!is_numeric($settings[$maxlen])) {
+      form_set_error($maxlen, t("The max length of the pair $element must be numeric."));
+    }
+    elseif ($settings[$maxlen] > $len) {
+      form_set_error($maxlen, t("The max length of the pair $element cannot be greater than $len characters."));
+    }
+  }
+
+
+  $trim_ra = array('label', 'value');
+  foreach ($element_ra as $element) {
+    foreach ($trim_ra as $type) {
+      trim($form_state['values']['instance']['settings'][$element . '_' . $type]);
+    }
+  }
+}
+
+/**
+ * Implements hook_field_is_empty().
+ */
+function pair_field_is_empty($item, $field) {
+  return empty($item['name']) && empty($item['value']);
+}
+
+
+/**
+ * Implements hook_field_validate().
+ */
+function pair_field_validate($entity_type, $entity, $field, $instance, $langcode, $items, &$errors) {
+  $name = isset($instance['settings']['name_label']) ? $instance['settings']['name_label'] : 'Name';
+  $value = isset($instance['settings']['value_label']) ? $instance['settings']['value_label'] : 'Value';
+  $optional_field_found = FALSE;
+  if (!isset($instance['settings']['validate_value']) || $instance['settings']['validate_value'] !== 0 ||
+    is_null($instance['settings']['validate_value'])) {
+    foreach ($items as $delta => $value) {
+      if (isset($items[$delta]))
+        _pair_validate($items[$delta], $delta, $field, $entity, $instance, $langcode, $optional_field_found, $errors);
+    }
+  }
+
+  if (!isset($instance['settings']['value'])) return;
+  if ($instance['settings']['value'] === 'optional' && $instance['settings']['name'] === 'optional' && $instance['required'] && !$optional_field_found) {
+    $errors[$field['field_name']][$langcode][0][] = array(
+      'error' => 'pair_required',
+      'message' => t("At least one $name or $value must be entered."),
+      'error_element' => array('value' => FALSE, 'name' => TRUE),
+    );
+  }
+}
+
+/**
+ * Implements hook_field_insert().
+ */
+function pair_field_insert($entity_type, $entity, $field, $instance, $langcode, &$items) {
+  $element_ra = array('name', 'value');
+  $settings = $instance['settings'];
+  foreach ($items as $delta => $value) {
+    foreach ($element_ra as $element) {
+      if (!strcasecmp($settings[$element], "value")) { // static
+        $items[$delta][$element] = $settings[$element . '_value'];
+      }
+      elseif (!strcasecmp($settings[$element], 'none')) { // none
+        $items[$delta][$element] = NULL;
+      }
+      _pair_process($item[$delta], $delta, $field);
+    }
+  }
+}
+
+/**
+ * Implements hook_field_update().
+ */
+function pair_field_update($entity_type, $entity, $field, $instance, $langcode, &$items) {
+  $element_ra = array('name', 'value');
+  $settings = $instance['settings'];
+  foreach ($items as $delta => $value) {
+    foreach ($element_ra as $element) {
+      if (!strcasecmp($settings[$element], "value")) { // static
+        $items[$delta][$element] = $settings[$element . '_value'];
+      }
+      elseif (!strcasecmp($settings[$element], 'none')) { // none
+        $items[$delta][$element] = NULL;
+      }
+      _pair_process($item[$delta], $delta, $field);
+    }
+  }
+}
+
+
+/**
+ * Implements hook_field_widget_info().
+ */
+function pair_field_widget_info() {
+  return array(
+    'pair_field' => array(
+      'label' => 'Pair',
+      'field types' => array('pair_field'),
+      'multiple values' => FIELD_BEHAVIOR_DEFAULT,
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_widget_form().
+ */
+function pair_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+  $element += array(
+    '#type' => $instance['widget']['type'],
+    '#default_value' => isset($items[$delta]) ? $items[$delta] : '',
+  );
+  return $element;
+}
+
+/**
+ * Implements hook_field_widget_error().
+ */
+function pair_field_widget_error($element, $error, $form, &$form_state) {
+  if ($error['error_element']['name']) {
+    form_error($element['name'], $error['message']);
+  }
+  elseif ($error['error_element']['value']) {
+    form_error($element['value'], $error['message']);
+  }
+}
+
+
+/**
+ * Prepares the item attributes and value for storage.
+ */
+function _pair_process(&$item, $delta = 0, $field) {
+  if (isset($item['name'])) $item['name'] = trim($item['name']);
+  if (isset($item['value'])) $item['value'] = trim($item['value']);
+}
+
+/**
+ * Validates that the pair field has been entered properly.
+ */
+function _pair_validate(&$item, $delta, $field, $entity, $instance, $langcode, &$optional_field_found, &$errors) {
+  $name = isset($instance['settings']['name_label']) ? $instance['settings']['name_label'] : 'Name';
+  $value = isset($instance['settings']['value_label']) ? $instance['settings']['value_label'] : 'Value';
+
+  if ($item['value'] && !(isset($instance['default_value'][$delta]['value']) &&
+    $item['value'] === $instance['default_value'][$delta]['value'] &&
+    !$instance['required'])) {
+    // Require a name for the pair if necessary.
+    if ($instance['settings']['name'] == 'required' &&
+      strlen(trim($item['name'])) == 0) {
+      $errors[$field['field_name']][$langcode][$delta][] = array(
+        'error' => 'pair_required',
+        'message' => t($name . 's are required for all pairs.'),
+        'error_element' => array('value' => FALSE, 'name' => TRUE),
+      );
+    }
+    // Require a value for the pair if necessary.
+    if ($instance['settings']['value'] == 'required' &&
+      strlen(trim($item['value'])) == 0) {
+      $errors[$field['field_value']][$langcode][$delta][] = array(
+        'error' => 'pair_required',
+        'message' => t($value . 's are required for all pairs.'),
+        'error_element' => array('value' => TRUE, 'value' => FALSE),
+      );
+    }
+  }
+  // Require a pair if we have a name.
+  if (isset($item['value']) && isset($instance['settings']['value']) &&
+    $instance['settings']['value'] !== 'optional' &&
+    strlen(isset($item['name']) ? $item['name'] : NULL) > 0 &&
+    strlen(trim($item['value'])) == 0) {
+    $errors[$field['field_name']][$langcode][$delta][] = array(
+      'error' => 'pair_required',
+      'message' => t("You cannot enter a $name without a $value."),
+      'error_element' => array('value' => TRUE, 'name' => FALSE),
+    );
+  }
+  // If the name is optional/none and the value is optional but the field is required,
+  // ensure there is at least one pair.
+  if (isset($instance['settings']['value']) && isset($item['value']) &&
+    $instance['settings']['value'] === 'optional'
+    && ($instance['settings']['name'] === 'optional' || $instance['settings']['name'] === 'none')
+    && ((isset($item['value']) && strlen(trim($item['value'])) !== 0) ||
+    (isset($item['name']) && strlen(trim($item['name'])) !== 0))) {
+    $optional_field_found = TRUE;
+  }
+  // Require entire field
+  if (!isset($instance['settings']['value'])) return;
+  if ($instance['settings']['value'] === 'optional' &&
+    ($instance['settings']['name'] === 'optional' || $instance['settings']['name'] === 'none') &&
+    $instance['required'] == 1 && !$optional_field_found && isset($instance['id'])) {
+    $errors[$field['field_name']][$langcode][$delta][] = array(
+      'error' => 'pair_required',
+      'message' => t("At least the $value must be entered."),
+      'error_element' => array('value' => TRUE, 'name' => FALSE),
+    );
+  }
+}
+
+/**
+ * Clean up user-entered values for a pair field according to field settings.
+ *
+ * @param $item
+ *   A single pair item, usually containing value, name, and attributes.
+ * @param $delta
+ *   The delta value if this field is one of multiple fields.
+ * @param $field
+ *   The CCK field definition.
+ * @param $entity
+ *   The entity containing this pair.
+ */
+function _pair_sanitize(&$item, $delta, &$field, $instance, &$entity) {
+  // Don't try to process empty pairs.
+  if (empty($item['value']) && empty($item['name'])) {
+    return;
+  }
+
+  // Replace Value tokens.
+  $entity_type = $instance['entity_type'];
+  $entity_info = entity_get_info($entity_type);
+  $property_id = $entity_info['entity keys']['id'];
+  $entity_token_type = isset($entity_info['token type']) ? $entity_info['token type'] : (
+    $entity_type == 'taxonomy_term' || $entity_type == 'taxonomy_vocabulary' ? str_replace('taxonomy_', '', $entity_type) : $entity_type
+  );
+  if (isset($instance['settings']['enable_tokens']) && $instance['settings']['enable_tokens']) {
+    global $user;
+    // Load the entity if necessary for entities in views.
+    if (isset($entity->{$property_id})) {
+      $entity_loaded = entity_load($entity_type, array($entity->{$property_id}));
+      $entity_loaded = array_pop($entity_loaded);
+    }
+    else {
+      $entity_loaded = $entity;
+    }
+    $item['value'] = token_replace($item['value'], array($entity_token_type => $entity_loaded));
+  }
+
+  $value = pair_cleanup_value($item['value']);
+  $value_parts = _pair_parse_value($value);
+
+  if (!empty($value_parts['value'])) {
+    $item['value'] = value($value_parts['value'],
+      array(
+        'absolute' => TRUE,
+      )
+    );
+  }
+
+  $display_value = value($value_parts['value'],
+    array(
+      'absolute' => TRUE,
+    )
+  );
+
+ /* if ($instance['settings']['display']['value_cutoff'] && strlen($display_value) > $instance['settings']['display']['value_cutoff']) {
+    $display_value = substr($display_value, 0, $instance['settings']['display']['value_cutoff']) . "...";
+  }*/
+
+  $item['display_value'] = $display_value;
+  $element_ra = array('name', 'value');
+  foreach ($element_ra as $element) {
+    // Use the name defined at the instance level.
+    $evalue = $element . '_value';
+    if (!strcasecmp($instance['settings'][$element], 'value') && strlen(trim($instance['settings'][$evalue]))) {
+      $name = $instance['settings'][$evalue];
+      if (function_exists('i18n_string_translate')) {
+        $i18n_string_name = "field:{$instance['field_name']}:{$instance['bundle']}:$evalue";
+        $name = i18n_string_translate($i18n_string_name, $name);
+      }
+    }
+    // Use the name defined by the user at the widget level.
+    elseif (isset($item[$element])) {
+      $name = $item[$element];
+    }
+    else {
+      $name = '';
+    }
+
+    // Replace tokens.
+    if ($name && ($instance['settings'][$element] == 'value' || $instance['settings']['enable_tokens'])) {
+      // Load the entity if necessary for entities in views.
+      if (isset($entity->{$property_id})) {
+        $entity_loaded = entity_load($entity_type, array($entity->{$property_id}));
+        $entity_loaded = array_pop($entity_loaded);
+      }
+      else {
+        $entity_loaded = $entity;
+      }
+      $name = token_replace($name, array($entity_token_type => $entity_loaded));
+    }
+    $item[$element] = empty($name) ? $item['display_value'] : $name;
+  }
+}
+
+/**
+ * Because parse_value doesn't work with relative values.
+ *
+ * @param string $value
+ *   Value to parse.
+ *
+ * @return Array
+ *   Array of value pieces - only 'value' and 'fragment'.
+ */
+function _pair_parse_value($value) {
+  $value_parts = array();
+  // Separate out the anchor, if any.
+  if (strpos($value, '#') !== FALSE) {
+    $value_parts['fragment'] = substr($value, strpos($value, '#') + 1);
+    $value = substr($value, 0, strpos($value, '#'));
+  }
+  // Separate out the query string, if any.
+  if (strpos($value, '?') !== FALSE) {
+    $query = substr($value, strpos($value, '?') + 1);
+    $value = substr($value, 0, strpos($value, '?'));
+  }
+  $value_parts['value'] = $value;
+  return $value_parts;
+}
+
+
+/**
+ * Implements hook_theme().
+ */
+function pair_theme() {
+  return array(
+    'pair_formatter_pair_default' => array(
+      'variables' => array('element' => NULL, 'field' => NULL),
+    ),
+    'pair_formatter_pair_plain' => array(
+      'variables' => array('element' => NULL, 'field' => NULL),
+    ),
+    'pair_formatter_pair_name_plain' => array(
+      'variables' => array('element' => NULL, 'field' => NULL),
+    ),
+    'pair_formatter_pair_value' => array(
+      'variables' => array('element' => NULL, 'field' => NULL),
+    ),
+    'pair_formatter_pair_short' => array(
+      'variables' => array('element' => NULL, 'field' => NULL),
+    ),
+    'pair_formatter_pair_label' => array(
+      'variables' => array('element' => NULL, 'field' => NULL),
+    ),
+    'pair_formatter_pair_separate' => array(
+      'variables' => array('element' => NULL, 'field' => NULL),
+    ),
+    'pair_field' => array(
+      'render element' => 'element',
+    ),
+  );
+}
+
+/**
+ * Formats a pair field widget.
+ */
+function theme_pair_field($vars) {
+  drupal_add_css(drupal_get_path('module', 'pair') . '/pair.css');
+  $element = $vars['element'];
+  // Prefix single value pair fields with the name of the field.
+  if (empty($element['#field']['multiple'])) {
+    if (isset($element['value']) && !isset($element['name'])) {
+      $element['value']['#title_display'] = 'invisible';
+    }
+  }
+
+  $output = '';
+  $output .= '<div class="pair-field-subrow clearfix">';
+  if (isset($element['name'])) {
+    $output .= '<div class="pair-field-name pair-field-column">' . drupal_render($element['name']) . '</div>';
+  }
+  if (isset($element['value'])) {
+    $output .= '<div class="pair-field-value' . (isset($element['name']) ? ' pair-field-column' : '') . '">' . drupal_render($element['value']) . '</div>';
+  }
+  $output .= '</div>';
+
+  return $output;
+}
+
+/**
+ * Implements hook_element_info().
+ */
+function pair_element_info() {
+  $elements = array();
+  $elements['pair_field'] = array(
+    '#input' => TRUE,
+    '#process' => array('pair_field_process'),
+    '#theme' => 'pair_field',
+    '#theme_wrappers' => array('form_element'),
+  );
+  return $elements;
+}
+
+
+/**
+ * Processes the pair type element before displaying the field.
+ *
+ * Build the form element. When creating a form using FAPI #process,
+ * note that $element['#value'] is already set.
+ *
+ * The $fields array is in $complete_form['#field_info'][$element['#field_name']].
+ */
+function pair_field_process($element, $form_state, $complete_form) {
+  $instance = field_widget_instance($element, $form_state);
+  $settings = $instance['settings'];
+  $name = isset($settings['name_label']) ? $settings['name_label'] : 'Name';
+  $value = isset($settings['value_label']) ? $settings['value_label'] : 'Value';
+
+  $element_ra = array('name' => $name, 'value' => $value);
+  $form_elements = 0;
+
+  foreach ($element_ra as $key => $val) {
+    if (in_array($settings[$key], array('value', 'none')) && isset($complete_form['#node_edit_form']) && $complete_form['#node_edit_form'] == TRUE) {
+      if (!strcasecmp($settings[$key], 'value')) {
+        $element[$key] = array(
+          '#markup' => "<b>$val</b> (static)<p>" . $settings[$key . '_value'] . '</p>',
+        );
+      }
+      elseif (!strcasecmp($settings[$key], 'none')) {
+        $element[$key] = array(
+          '#markup' => "<b>$val</b> - None",
+        );
+      }
+    }
+    elseif (!isset($complete_form['#node_edit_form']) || $complete_form['#node_edit_form'] == FALSE ||
+      ($settings[$key] !== 'none' && $settings[$key] !== 'value')) {
+      $element[$key] = array(
+        '#type' => 'textfield',
+        '#maxlength' => $settings[$key . '_maxlength'],
+        '#title' => t($val),
+        '#description' => t("$val is limited to @maxlength chars max.", array('@maxlength' => $settings[$key . '_maxlength'])),
+        '#required' => ($settings['name'] == 'required' && (($element['#delta'] == 0 && $element['#required']) || !empty($element['#value']['value']))) ? TRUE : FALSE,
+        '#default_value' => isset($element['#value'][$key]) ? $element['#value'][$key] : NULL,
+      );
+    }
+  }
+
+  if (!$form_elements) {
+    $element['#description'] = 'No values need to be filled in.';
+  }
+
+  // If the name field is avaliable or there are field accepts multiple values
+  // then allow the individual field items display the required asterisk if needed.
+  if (isset($element['name']) || isset($element['_weight'])) {
+    // To prevent an extra required indicator, disable the required flag on the
+    // base element since all the sub-fields are already required if desired.
+    $element['#required'] = FALSE;
+  }
+
+  return $element;
+}
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function pair_field_formatter_info() {
+  return array(
+    'pair_default' => array(
+      'label' => t('Name to represent the pair (default)'),
+      'field types' => array('pair_field'),
+      'multiple values' => FIELD_BEHAVIOR_DEFAULT,
+    ),
+    'pair_value' => array(
+      'label' => t('Value to represent the pair'),
+      'field types' => array('pair_field'),
+      'multiple values' => FIELD_BEHAVIOR_DEFAULT,
+    ),
+    'pair_name_value' => array(
+      'label' => t('Both name and value of pair'),
+      'field types' => array('pair_field'),
+      'multiple values' => FIELD_BEHAVIOR_DEFAULT,
+    ),
+    'pair_label' => array(
+      'label' => t('Label, as pair with label as name'),
+      'field types' => array('pair_field'),
+      'multiple values' => FIELD_BEHAVIOR_DEFAULT,
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_formatter_settings_form().
+ */
+function pair_field_formatter_settings_form($field, $instance, $view_mode, $form, &$form_state) {
+  $display = $instance['display'][$view_mode];
+  $settings = $display['settings'];
+  $element = array();
+
+  return $element;
+}
+
+/**
+ * Implements hook_field_formatter_settings_summary().
+ */
+function pair_field_formatter_settings_summary($field, $instance, $view_mode) {
+  $display = $instance['display'][$view_mode];
+  $settings = $display['settings'];
+
+  return '';
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function pair_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  $elements = array();
+  foreach ($items as $delta => $item) {
+    $elements[$delta] = array(
+      '#theme' => 'pair_formatter_' . $display['type'],
+      '#element' => $item,
+      '#field' => $instance,
+      '#display' => $display,
+    );
+  }
+  return $elements;
+}
+
+/**
+ * Formats a pair.
+ */
+function theme_pair_formatter_pair_default($vars) {
+  // Display the name if it's available
+  if (!empty($vars['element']['name'])) {
+    return $vars['element']['name'];
+  }
+  elseif (!empty($vars['element']['value'])) { // otherwise display the value
+    return $vars['element']['value'];
+  }
+}
+
+/**
+ * Formats a pair using an alternate display Value for its pair text.
+ */
+function theme_pair_formatter_pair_value($vars) {
+  return isset($vars['element']['value']) ? $vars['element']['value'] : '';
+}
+
+/**
+ * Formats a pair using both the name and value for text.
+ */
+function theme_pair_formatter_pair_name_value($vars) {
+  return (isset($vars['element']['name']) && isset($vars['element']['value'])) ?
+    $vars['element']['name'] . " " . $vars['element']['value'] : '';
+}
+
+
+/**
+ * Formats a pair using the field's label as pair text.
+ */
+function theme_pair_formatter_pair_label($vars) {
+  return (isset($vars['element']['name']) || isset($vars['element']['value'])) ?
+    $vars['field']['label'] : '';
+}
+
+/**
+ * Implements hook_token_list().
+ */
+function pair_token_list($type = 'all') {
+  if ($type === 'field' || $type === 'all') {
+    $tokens = array();
+    $tokens['pair']['value'] = t("Pair Value");
+    $tokens['pair']['name'] = t("Pair name");
+    $tokens['pair']['view'] = t("Formatted pair");
+    return $tokens;
+  }
+}
+
+function pair_token_values($type, $object = NULL) {
+  if ($type === 'field') {
+    $item = $object[0];
+
+    $tokens['value'] = $item['value'];
+    $tokens['name'] = $item['name'];
+    $tokens['view'] = isset($item['view']) ? $item['view'] : '';
+
+    return $tokens;
+  }
+}
+
+/**
+ * Implements hook_views_api().
+ */
+function pair_views_api() {
+  return array(
+    'api' => 2,
+    'path' => drupal_get_path('module', 'pair') . '/views',
+  );
+}
+
+/**
+ * Cleans up a value.
+ * @param string $value
+ * @param string $protocol
+ *   The protocol to be prepended to the value if one is not specified
+ */
+function pair_cleanup_value($value) {
+  $value = trim($value);
+  return $value;
+}
+
+
+/**
+ * Implements hook_migrate_field_alter().
+ */
+function pair_content_migrate_field_alter(&$field_value, $instance_value) {
+  if ($field_value['type'] == 'pair') {
+    // Adjust the field type.
+    $field_value['type'] = 'pair_field';
+    // Remove settings that are now on the instance.
+    foreach (array('display', 'value', 'name', 'name_value', 'enable_tokens', 'validate_value') as $setting) {
+      unset($field_value['settings'][$setting]);
+    }
+  }
+}
+
+/**
+ * Implements hook_migrate_instance_alter().
+ *
+ * Widget type also changed to pair_field.
+ */
+function pair_content_migrate_instance_alter(&$instance_value, $field_value) {
+  if ($field_value['type'] == 'pair') {
+    // Grab settings that were previously on the field.
+    foreach (array('display', 'value', 'name', 'name_value', 'enable_tokens', 'validate_value') as $setting) {
+      if (isset($field_value['settings'][$setting])) {
+        $instance_value['settings'][$setting] = $field_value['settings'][$setting];
+      }
+    }
+    // Adjust widget type.
+    if ($instance_value['widget']['type'] == 'pair') {
+      $instance_value['widget']['type'] = 'pair_field';
+    }
+    // Adjust formatter types.
+    foreach ($instance_value['display'] as $context => $settings) {
+      if (in_array($settings['type'],
+        array('default', 'name_plain', 'value', 'plain', 'short', 'label', 'separate'))) {
+        $instance_value['display'][$context]['type'] = 'pair_' . $settings['type'];
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_field_settings_form().
+ */
+function pair_field_settings_form() {
+  return array();
+}
+
+/**
+ * Additional callback to adapt the property info of pair fields.
+ *
+ * @see entity_metadata_field_entity_property_info().
+ */
+function pair_field_property_info_callback(&$info, $entity_type, $field, $instance, $field_type) {
+  $property = &$info[$entity_type]['bundles'][$instance['bundle']]['properties'][$field['field_name']];
+  // Define a data structure so it's possible to deal with both the pair name
+  // and Value.
+  $property['getter callback'] = 'entity_metadata_field_verbatim_get';
+  $property['setter callback'] = 'entity_metadata_field_verbatim_set';
+
+  // Auto-create the field item as soon as a property is set.
+  $property['auto creation'] = 'pair_field_item_create';
+
+  $property['property info'] = pair_field_item_property_info();
+  $property['property info']['value']['required'] = !$instance['settings']['value'];
+  $property['property info']['name']['required'] = ($instance['settings']['name'] == 'required');
+  if ($instance['settings']['name'] == 'none') {
+    unset($property['property info']['name']);
+  }
+  unset($property['query callback']);
+}
+
+/**
+ * Callback for creating a new, empty pair field item.
+ *
+ * @see pair_field_property_info_callback()
+ */
+function pair_field_item_create() {
+  return array('name' => NULL, 'value' => NULL);
+}
+
+/**
+ * Defines info for the properties of the pair-field item data structure.
+ */
+function pair_field_item_property_info() {
+  $properties['name'] = array(
+    'type' => 'text',
+    'label' => t('The name of the pair.'),
+    'setter callback' => 'entity_property_verbatim_set',
+  );
+  $properties['value'] = array(
+    'type' => 'text',
+    'label' => t('The value of the pair.'),
+    'setter callback' => 'entity_property_verbatim_set',
+  );
+  return $properties;
+}
+
+/**
+ * Implements hook_field_update_instance().
+ */
+function pair_field_update_instance($instance, $prior_instance) {
+  if (function_exists('i18n_string_update') &&
+    $instance['widget']['type'] == 'pair_field' &&
+    $prior_instance['settings']['name_value'] != $instance['settings']['name_value']) {
+    $i18n_string_name = "field:{$instance['field_name']}:{$instance['bundle']}:name_value";
+    i18n_string_update($i18n_string_name, $instance['settings']['name_value']);
+  }
+}
+
+/**
+ * Implements hook_i18n_string_list_TEXTGROUP_alter().
+ */
+function pair_i18n_string_list_field_alter(&$strings, $type = NULL, $object = NULL) {
+  if ($type != 'field_instance' || !is_array($object) || !isset($object['widget']['type'])) {
+    return;
+  }
+  if ($object['widget']['type'] == 'pair_field' && isset($object['settings']['name_value'])) {
+    $strings['field'][$object['field_name']][$object['bundle']]['name_value']['string'] = $object['settings']['name_value'];
+  }
+}
