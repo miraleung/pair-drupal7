@@ -674,6 +674,8 @@ function pair_field_process($element, $form_state, $complete_form) {
         '#description' => t("$val is limited to @maxlength chars max.", array('@maxlength' => $settings[$key . '_maxlength'])),
         '#required' => ($settings['name'] == 'required' && (($element['#delta'] == 0 && $element['#required']) || !empty($element['#value']['value']))) ? TRUE : FALSE,
         '#default_value' => isset($element['#value'][$key]) ? $element['#value'][$key] : NULL,
+        '#prefix' => "<div class=\"pair-field-" . strtolower($val) . "\">",
+        '#suffix' => "</div>",
       );
     }
   }
