@@ -87,7 +87,8 @@ function pair_field_instance_settings_form($field, $instance) {
   }
 
   $element_ra = array('name' => 'Name', 'value' => 'Value');
-
+	$def_val = isset($settings[$fe]) && !empty(trim($settings[$fe])) ?
+        $settings[$fe] : $title;
   // Label textfields
   foreach ($element_ra as $element => $title) {
     $pfx = '<div class="pair-' . $element . '-label-settings">';
@@ -95,8 +96,7 @@ function pair_field_instance_settings_form($field, $instance) {
     $form[$fe] = array(
       '#type' => 'textfield',
       '#title' => t("$title Label"),
-      '#default_value' => isset($settings[$fe]) && !empty(trim($settings[$fe])) ?
-        $settings[$fe] : $title,
+      '#default_value' => $def_val,
       '#description' => t("The label for the $title that will be displayed to the user."),
       '#prefix' => $pfx,
       '#suffix' => '</div>',
